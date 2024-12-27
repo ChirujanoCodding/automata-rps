@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use bevy::{ecs::entity::VisitEntities, prelude::*};
+use bevy::prelude::*;
 
 use crate::{
     entities::{Paper, Rock, Scissors},

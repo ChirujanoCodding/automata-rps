@@ -11,7 +11,7 @@ use bevy_spatial::kdtree::KDTree2;
 use bevy_spatial::{AutomaticUpdate, SpatialAccess, SpatialStructure};
 use rand::Rng;
 
-use crate::constants::SPEED_FACTOR;
+use crate::constants::{SPEED_FACTOR, SPRITE_SIZE};
 use crate::entities::{Velocity, Vision};
 use crate::{
     entities::{HasEnemy, HasSprite, HasTarget, Paper, Rock, Scissors},
@@ -64,6 +64,7 @@ impl Plugin for GameplayPlugin {
                 move_entity::<Scissors>,
                 check_boundaries,
             )
+                .chain()
                 .run_if(in_state(GameState::InGame)),
         );
     }
@@ -71,8 +72,13 @@ impl Plugin for GameplayPlugin {
 
 type KdTree<T> = KDTree2<T>;
 
-fn move_entity<T: Component + HasTarget + HasEnemy>(
-    mut query: Query<(&mut Transform, &Velocity, &Vision), With<T>>,
+fn move_entity<T: Component + HasTarget + HasEnemy + HasSprite + Copy>(
+    time: Res<Time>,
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    mut query: Query<(&mut Transform, &Velocity, &Vision, &T), With<T>>,
+    mut target_query: Query<Entity, (With<T::Target>, Without<T>)>,
+    mut enemy_query: Query<Entity, (With<T::Enemy>, Without<T>)>,
     target_tree: Res<KdTree<T::Target>>,
     enemies_tree: Res<KdTree<T::Enemy>>,
 ) {
@@ -80,16 +86,31 @@ fn move_entity<T: Component + HasTarget + HasEnemy>(
         return;
     }
 
-    for (mut entity, velocity, vision) in query.iter_mut() {
-        let pos = entity.translation.xy() + velocity.0 * SPEED_FACTOR;
+    for (mut entity, velocity, vision, me) in query.iter_mut() {
+        let pos = entity.translation.xy() + velocity.0 * SPEED_FACTOR * time.delta_secs();
         entity.translation = vec3(pos.x, pos.y, 0.0);
 
-        if let Some((target_pos, _)) = target_tree.nearest_neighbour(pos) {
+        if let Some((target_pos, Some(target))) = target_tree.nearest_neighbour(pos) {
+            if target_query.is_empty() {
+                continue;
+            };
             let towards = (target_pos - pos).normalize();
-            entity.translation += vec3(towards.x, towards.y, 0.0);
+            let distance = pos.distance(target_pos);
+            if distance > SPRITE_SIZE * 2. {
+                entity.translation += vec3(towards.x, towards.y, 0.0);
+            } else {
+                let mut sprite = Sprite::from_image(server.load(me.img()));
+                sprite.custom_size = Some(Vec2::splat(SPRITE_SIZE * 2.));
+
+                let target = target_query.get_mut(target).expect("unreachable");
+                commands
+                    .entity(target)
+                    .remove::<(T::Target, Sprite)>()
+                    .insert((*me, sprite));
+            }
         }
 
-        let within_distance = enemies_tree.within_distance(pos, vision.0 + 40.);
+        let within_distance = enemies_tree.within_distance(pos, vision.0);
 
         let nearest_enemy = within_distance.iter().reduce(|acc, e| {
             let closest = (acc.0 - pos).length_squared();
@@ -101,8 +122,9 @@ fn move_entity<T: Component + HasTarget + HasEnemy>(
             }
         });
 
-        if let Some(&enemy) = nearest_enemy {
-            // println!("detected enemy!");
+        if let Some(&(enemy_pos, Some(_))) = nearest_enemy {
+            let push = (enemy_pos - pos).normalize() * SPEED_FACTOR * -5.;
+            entity.translation += vec3(push.x, push.y, 0.0);
         }
     }
 }
@@ -133,7 +155,7 @@ fn setup(mut regions: ResMut<GenerableRegions>, query: Query<&Window>) {
     let window = query.single();
     let width = window.resolution.width() / 2.;
     let height = window.resolution.height() / 2.;
-    let generated_regions = generate_regions(width, height, 3);
+    let generated_regions = generate_regions(width, height, 12);
     regions.0 = generated_regions;
 }
 
@@ -152,7 +174,7 @@ fn spawn_entities(
     let material = MeshMaterial2d(materials.add(Color::linear_rgb(255., 0., 0.)));
 
     for (i, &(x, y, r)) in regions {
-        std::iter::repeat_n((), 10).for_each(|_| {
+        std::iter::repeat_n((), 100).for_each(|_| {
             let angle = rng.gen_range(0.0..(2.0 * PI));
             let pos = vec2(x, y) + vec2(cos(angle), sin(angle)) * rng.gen_range(0.0..r);
             let transform = Transform::from_xyz(pos.x, pos.y, 0.0);
@@ -182,7 +204,7 @@ fn spawn_entities(
                     &mut meshes,
                     material.clone(),
                 ),
-                _ => unreachable!(),
+                _ => {}
             };
         });
     }
@@ -199,9 +221,9 @@ fn spawn<T: Component + HasSprite>(
     material: MeshMaterial2d<ColorMaterial>,
 ) {
     let mut sprite = Sprite::from_image(server.load(entity.img()));
-    sprite.custom_size = Some(Vec2::splat(40.));
+    sprite.custom_size = Some(Vec2::splat(SPRITE_SIZE * 2.));
     let velocity = Velocity(Vec2::splat(1.));
-    let r = 75.;
+    let r = SPRITE_SIZE + 50.;
     let vision = Vision(r);
     let mesh = meshes.add(Annulus::new(r - 1., r + 1.));
     commands
