@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-avian2d = "0.2.0"
 bevy = { version = "0.15.0", features = ["dynamic_linking"] }
-bevy_rand = { version = "0.8.0", features = ["rand_chacha", "wyrand"] }
+bevy_rand = { version = "0.8.0", features = ["wyrand"] }
+bevy_spatial = "0.10.0"
 rand = "0.8.5"
-
 
 [profile.dev]
 opt-level = 1
