@@ -62,10 +62,12 @@ impl Plugin for GameplayPlugin {
                 move_entity::<Rock>,
                 move_entity::<Paper>,
                 move_entity::<Scissors>,
-                check_boundaries,
             )
-                .chain()
                 .run_if(in_state(GameState::InGame)),
+        )
+        .add_systems(
+            PostUpdate,
+            check_boundaries.run_if(in_state(GameState::InGame)),
         );
     }
 }
@@ -76,9 +78,8 @@ fn move_entity<T: Component + HasTarget + HasEnemy + HasSprite + Copy>(
     time: Res<Time>,
     mut commands: Commands,
     server: Res<AssetServer>,
-    mut query: Query<(&mut Transform, &Velocity, &Vision, &T), With<T>>,
+    mut query: Query<(&mut Transform, &Velocity, &Vision, &T)>,
     mut target_query: Query<Entity, (With<T::Target>, Without<T>)>,
-    mut enemy_query: Query<Entity, (With<T::Enemy>, Without<T>)>,
     target_tree: Res<KdTree<T::Target>>,
     enemies_tree: Res<KdTree<T::Enemy>>,
 ) {
@@ -102,11 +103,12 @@ fn move_entity<T: Component + HasTarget + HasEnemy + HasSprite + Copy>(
                 let mut sprite = Sprite::from_image(server.load(me.img()));
                 sprite.custom_size = Some(Vec2::splat(SPRITE_SIZE * 2.));
 
-                let target = target_query.get_mut(target).expect("unreachable");
-                commands
-                    .entity(target)
-                    .remove::<(T::Target, Sprite)>()
-                    .insert((*me, sprite));
+                if let Ok(target) = target_query.get_mut(target) {
+                    commands
+                        .entity(target)
+                        .remove::<(T::Target, Sprite)>()
+                        .insert((*me, sprite));
+                }
             }
         }
 
@@ -174,7 +176,7 @@ fn spawn_entities(
     let material = MeshMaterial2d(materials.add(Color::linear_rgb(255., 0., 0.)));
 
     for (i, &(x, y, r)) in regions {
-        std::iter::repeat_n((), 100).for_each(|_| {
+        std::iter::repeat_n((), 25).for_each(|_| {
             let angle = rng.gen_range(0.0..(2.0 * PI));
             let pos = vec2(x, y) + vec2(cos(angle), sin(angle)) * rng.gen_range(0.0..r);
             let transform = Transform::from_xyz(pos.x, pos.y, 0.0);
