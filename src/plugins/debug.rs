@@ -25,6 +25,7 @@ impl Plugin for DebugPlugin {
                     toggle_scissors,
                     toggle_scissors_radius,
                     control_time,
+                    control_sound,
                 ),
             );
     }
@@ -37,7 +38,6 @@ pub struct DebugPoint;
 pub struct DebugRadius {
     pub mesh: Mesh2d,
     pub material: MeshMaterial2d<ColorMaterial>,
-    // pub pos: Transform,
     pub visible: Visibility,
 }
 
@@ -241,6 +241,12 @@ fn toggle_scissors_radius(
         } else {
             Visibility::Hidden
         };
+    }
+}
+
+fn control_sound(mut res: ResMut<GameControl>, keys: Res<ButtonInput<KeyCode>>) {
+    if keys.just_pressed(KeyCode::KeyS) {
+        res.sound = !res.sound;
     }
 }
 

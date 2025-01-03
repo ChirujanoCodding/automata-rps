@@ -1,7 +1,10 @@
-use bevy::prelude::{Resource, States};
+use bevy::prelude::{Entity, Resource, States};
 
 #[derive(Resource, Default)]
 pub struct GenerableRegions(pub Vec<(f32, f32, f32)>);
+
+#[derive(Resource, Default)]
+pub struct CollidablePairs(pub Vec<(Entity, Entity)>);
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GameState {
@@ -25,6 +28,7 @@ pub struct DebugState {
 #[derive(Resource, Default)]
 pub struct GameControl {
     pub stop: bool,
+    pub sound: bool,
 }
 
 impl Default for DebugState {

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.15.0", features = ["dynamic_linking"] }
+bevy_kira_audio = "0.21.0"
 bevy_rand = { version = "0.8.0", features = ["wyrand"] }
 bevy_spatial = "0.10.0"
 rand = "0.8.5"
