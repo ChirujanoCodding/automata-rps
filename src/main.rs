@@ -1,6 +1,8 @@
+pub mod constants;
 pub mod entities;
 pub mod events;
 pub mod plugins;
+pub mod resources;
 pub mod utils;
 
 use bevy::prelude::*;
@@ -14,7 +16,6 @@ fn setup(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(GameplayPlugin)
-        .add_plugins(DefaultPlugins)
         .add_plugins(EntropyPlugin::<WyRand>::default())
         .insert_resource(ClearColor(Color::Srgba(Srgba::rgb(240.0, 240.0, 240.0)))) // background
         .add_systems(Startup, setup)

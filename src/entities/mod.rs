@@ -4,6 +4,13 @@ use bevy::{math::Vec2, prelude::Component};
 
 use crate::add_components;
 
+#[derive(Debug)]
+pub enum Mock {
+    Rock,
+    Paper,
+    Scissors,
+}
+
 #[derive(Component, Clone, Debug, PartialEq, Eq, Copy)]
 pub struct Rock;
 
@@ -18,6 +25,9 @@ pub struct Enemy<T: Component>(pub T);
 
 #[derive(Component)]
 pub struct Target<T: Component>(pub T);
+
+#[derive(Component, Clone)]
+pub struct Vision(pub f32);
 
 #[derive(Component)]
 pub struct Velocity(pub Vec2);
@@ -34,12 +44,6 @@ pub trait HasSprite {
     const PREFIX: &str = "sprites/";
     fn img(&self) -> String;
     fn sound(&self) -> String;
-}
-
-#[derive(Component, Debug, Clone, Copy)]
-pub enum ColliderType {
-    Extern,
-    Intern,
 }
 
 add_components!(Rock, Paper, Scissors);
