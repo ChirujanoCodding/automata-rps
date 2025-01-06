@@ -25,10 +25,19 @@ pub struct DebugState {
     pub radius_scissors: bool,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct GameControl {
     pub stop: bool,
     pub sound: bool,
+}
+
+impl Default for GameControl {
+    fn default() -> Self {
+        Self {
+            stop: true,
+            sound: true,
+        }
+    }
 }
 
 impl Default for DebugState {

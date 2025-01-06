@@ -29,7 +29,9 @@ impl Plugin for GameplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                resolution: (1920., 1080.).into(),
+                resolution: (1080. / 2., 1920. / 2.).into(),
+                title: "RPS - Simulation".to_owned(),
+                name: Some("RPS - Simulation".to_owned()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -56,14 +58,7 @@ impl Plugin for GameplayPlugin {
         .insert_resource(CollidablePairs::default())
         .add_systems(
             Startup,
-            (
-                setup,
-                spawn_entities,
-                // detect_collisions::<Rock>,
-                // detect_collisions::<Paper>,
-                // detect_collisions::<Scissors>,
-                // resolve_collisions,
-            )
+            (setup, spawn_entities)
                 .chain()
                 .run_if(in_state(GameState::LoadingRes)),
         )
@@ -84,15 +79,6 @@ impl Plugin for GameplayPlugin {
                 .chain()
                 .run_if(in_state(GameState::InGame)),
         )
-        // .add_systems(
-        //     Update,
-        //     (
-        //         detect_collisions::<Rock>,
-        //         detect_collisions::<Paper>,
-        //         detect_collisions::<Scissors>,
-        //     )
-        //         .run_if(in_state(GameState::InGame)),
-        // )
         .add_systems(
             PostUpdate,
             (
@@ -100,7 +86,9 @@ impl Plugin for GameplayPlugin {
                 resolve_collisions::<Rock>,
                 resolve_collisions::<Paper>,
                 resolve_collisions::<Scissors>,
+                cleanup_collisions,
             )
+                .chain()
                 .run_if(in_state(GameState::InGame)),
         );
     }
@@ -113,8 +101,6 @@ fn detect_collisions<T: Component>(
     tree: Res<KdTree<T>>,
     mut collision_pairs: ResMut<CollidablePairs>,
 ) {
-    collision_pairs.0.clear();
-
     for (entity, transform) in query.iter() {
         let pos = transform.translation.xy();
 
@@ -130,6 +116,10 @@ fn detect_collisions<T: Component>(
     }
 }
 
+fn cleanup_collisions(mut collisions: ResMut<CollidablePairs>) {
+    collisions.0.clear();
+}
+
 fn resolve_collisions<T: Component>(
     mut query: Query<&mut Transform, With<T>>,
     collision_pairs: Res<CollidablePairs>,
@@ -139,13 +129,6 @@ fn resolve_collisions<T: Component>(
         return;
     };
     for &(entity_a, entity_b) in collision_pairs.0.iter() {
-        println!("{:?} - {:?}", entity_a, entity_b);
-        // match query.get_many_mut([entity_a, entity_b]) {
-        //     Ok(_) => {
-        //         println!("success")
-        //     }
-        //     Err(e) => println!("{e:?}"),
-        // };
         let Ok([mut transform_a, mut transform_b]) = query.get_many_mut([entity_a, entity_b])
         else {
             continue;
@@ -164,14 +147,20 @@ fn resolve_collisions<T: Component>(
     }
 }
 
-fn update_positions(time: Res<Time>, mut query: Query<(&mut Transform, &Velocity)>) {
+fn update_positions(
+    mut rng: ResMut<GlobalEntropy<WyRand>>,
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Velocity)>,
+) {
     if query.is_empty() {
         return;
     }
 
     for (mut transform, velocity) in query.iter_mut() {
-        let pos = transform.translation.xy() + velocity.0 * SPEED_FACTOR * time.delta_secs();
-        transform.translation = vec3(pos.x, pos.y, 0.0);
+        let tremor_x = rng.gen_range(-1.5..1.5) * 0.5;
+        let tremor_y = rng.gen_range(-1.5..1.5) * 0.5;
+        let pos = transform.translation.xy() + velocity.0 * time.delta_secs();
+        transform.translation = vec3(pos.x + tremor_x, pos.y + tremor_y, 0.0);
     }
 }
 
@@ -209,7 +198,7 @@ fn handle_targets<T: Component + HasTarget + HasSprite + Copy>(
                         .insert((*me, sprite));
                 }
             } else {
-                let towards = (target_pos - pos).normalize();
+                let towards = (target_pos - pos).normalize() * SPEED_FACTOR;
                 transform.translation += vec3(towards.x, towards.y, 0.0);
             }
         }
@@ -235,8 +224,25 @@ fn handle_enemies<T: Component + HasEnemy>(
         });
 
         if let Some(&(enemy_pos, _)) = nearest_enemy {
-            let push = (enemy_pos - pos).normalize() * SPEED_FACTOR * -5.;
-            transform.translation += vec3(push.x, push.y, 0.0);
+            let push = (enemy_pos - pos).normalize() * -2.;
+
+            let max_speed = 2.;
+            let push_magnitude = push.length();
+
+            let final_push = if push_magnitude > max_speed {
+                push * (max_speed / push_magnitude)
+            } else {
+                push
+            };
+
+            let lerp_factor = 0.5; // Ajusta el factor de interpolación (0.0 - 1.0)
+            let smoothed_push = transform
+                .translation
+                .xy()
+                .lerp(transform.translation.truncate() + final_push, lerp_factor)
+                - transform.translation.truncate();
+
+            transform.translation += vec3(smoothed_push.x, smoothed_push.y, 0.0);
         }
     }
 }
@@ -288,7 +294,7 @@ fn setup(mut regions: ResMut<GenerableRegions>, query: Query<&Window>) {
     let window = query.single();
     let width = window.resolution.width() / 2.;
     let height = window.resolution.height() / 2.;
-    let generated_regions = generate_regions(width, height, 3);
+    let generated_regions = generate_regions(width, height, 48);
     regions.0 = generated_regions;
 }
 
@@ -307,11 +313,11 @@ fn spawn_entities(
     let material = MeshMaterial2d(materials.add(Color::linear_rgb(255., 0., 0.)));
 
     for (i, &(x, y, r)) in regions {
-        std::iter::repeat_n((), 10).for_each(|_| {
+        std::iter::repeat_n((), 2).for_each(|_| {
             let angle = rng.gen_range(0.0..(2.0 * PI));
             let pos = vec2(x, y) + vec2(cos(angle), sin(angle)) * rng.gen_range(0.0..r);
             let transform = Transform::from_xyz(pos.x, pos.y, 0.0);
-            let radius = rng.gen_range(50.0..150.0);
+            let radius = rng.gen_range(75.0..125.0);
             match i % len {
                 0 => spawn(
                     &mut commands,
@@ -359,7 +365,7 @@ fn spawn<T: Component + HasSprite>(
 ) {
     let mut sprite = Sprite::from_image(server.load(entity.img()));
     sprite.custom_size = Some(Vec2::splat(SPRITE_SIZE * 2.));
-    let velocity = Velocity(Vec2::splat(1.));
+    let velocity = Velocity(Vec2::splat(SPEED_FACTOR));
     let r = SPRITE_SIZE + radius;
     let vision = Vision(r);
     let mesh = meshes.add(Annulus::new(r - 1., r + 1.));
